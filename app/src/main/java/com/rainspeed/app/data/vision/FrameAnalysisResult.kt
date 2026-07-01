@@ -10,6 +10,7 @@ import com.rainspeed.app.domain.model.DetectedStreak
 data class FrameAnalysisResult(
     val previewBitmap: Bitmap,
     val streaks: List<DetectedStreak>,
+    val trackedAngles: List<Double>,
     val displayWidth: Int,
     val displayHeight: Int
 )

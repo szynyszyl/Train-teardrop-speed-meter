@@ -27,6 +27,8 @@ class FrameProcessor(private val dropDetector: DropDetector = DropDetector()) {
 
         val streaks = dropDetector.detectStreaks(gray)
             .map { it.rotated(rotationDegrees, width, height) }
+        val trackedAngles = dropDetector.trackMotion(gray)
+            .map { it.rotated(rotationDegrees, width, height).angleFromVerticalDegrees }
 
         val displayMat = gray.rotated(rotationDegrees)
         if (displayMat !== gray) gray.release()
@@ -38,10 +40,14 @@ class FrameProcessor(private val dropDetector: DropDetector = DropDetector()) {
         return FrameAnalysisResult(
             previewBitmap = bitmap,
             streaks = streaks,
+            trackedAngles = trackedAngles,
             displayWidth = bitmap.width,
             displayHeight = bitmap.height
         )
     }
+
+    /** Releases OpenCV state held for optical-flow tracking; call when the camera stops. */
+    fun reset() = dropDetector.reset()
 
     private fun ImageProxy.toCroppedGrayMat(): Mat {
         val yPlane = planes[0]

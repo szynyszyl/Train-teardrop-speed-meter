@@ -29,6 +29,7 @@ import com.rainspeed.app.data.camera.CameraController
 import com.rainspeed.app.data.camera.ThrottlingAnalyzer
 import com.rainspeed.app.data.vision.FrameAnalysisResult
 import com.rainspeed.app.data.vision.FrameProcessor
+import com.rainspeed.app.domain.vision.AngleAggregator
 
 @Composable
 fun CameraPreviewScreen(modifier: Modifier = Modifier) {
@@ -36,6 +37,7 @@ fun CameraPreviewScreen(modifier: Modifier = Modifier) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraController = remember { CameraController(context) }
     val frameProcessor = remember { FrameProcessor() }
+    val angleAggregator = remember { AngleAggregator() }
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
     var lastFrame by remember { mutableStateOf<FrameAnalysisResult?>(null) }
 
@@ -65,8 +67,18 @@ fun CameraPreviewScreen(modifier: Modifier = Modifier) {
                 }
             }
 
+            val angleEstimate = angleAggregator.aggregate(frame.trackedAngles)
+            val angleText = if (angleEstimate != null) {
+                "Kąt: %.1f° (±%.1f°, n=%d)".format(
+                    angleEstimate.medianDegrees,
+                    angleEstimate.spreadDegrees,
+                    angleEstimate.sampleCount
+                )
+            } else {
+                "Kąt: brak danych (śledzenie rozpoczyna się)"
+            }
             Text(
-                text = "Wykryte smugi: ${frame.streaks.size}",
+                text = "Wykryte smugi: ${frame.streaks.size}\n$angleText",
                 color = Color.White,
                 modifier = Modifier
                     .align(Alignment.TopStart)
@@ -104,6 +116,9 @@ fun CameraPreviewScreen(modifier: Modifier = Modifier) {
     }
 
     DisposableEffect(Unit) {
-        onDispose { cameraController.shutdown() }
+        onDispose {
+            cameraController.shutdown()
+            frameProcessor.reset()
+        }
     }
 }
