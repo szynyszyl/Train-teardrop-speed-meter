@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.rainspeed.app.data.camera.CameraController
 import com.rainspeed.app.data.camera.ThrottlingAnalyzer
 import com.rainspeed.app.data.location.LocationSpeedProvider
+import com.rainspeed.app.data.logging.LoggingRepository
 import com.rainspeed.app.data.vision.FrameAnalysisResult
 import com.rainspeed.app.data.vision.FrameProcessor
 import com.rainspeed.app.domain.calibration.CalibrationModel
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.io.File
 
 /**
  * Combines the camera-derived angle estimate with GPS speed via [kotlinx.coroutines.flow.combine],
@@ -37,6 +39,7 @@ class FusionViewModel(application: Application) : AndroidViewModel(application) 
     private val locationSpeedProvider = LocationSpeedProvider(application)
     private val calibrationModel = CalibrationModel()
     private val speedFusion = SpeedFusion(calibrationModel)
+    private val loggingRepository = LoggingRepository(application)
 
     private val _frame = MutableStateFlow<FrameAnalysisResult?>(null)
     val frame: StateFlow<FrameAnalysisResult?> = _frame.asStateFlow()
@@ -68,6 +71,19 @@ class FusionViewModel(application: Application) : AndroidViewModel(application) 
         locationSpeedProvider.speedUpdates()
     ) { angleEstimate, locationSpeed ->
         val result = speedFusion.fuse(angleEstimate, locationSpeed)
+
+        if (angleEstimate != null || locationSpeed != null) {
+            loggingRepository.logMeasurement(
+                timestampMillis = System.currentTimeMillis(),
+                angleMedianDegrees = angleEstimate?.medianDegrees,
+                angleSpreadDegrees = angleEstimate?.spreadDegrees,
+                gpsSpeedMetersPerSecond = locationSpeed?.speedMetersPerSecond,
+                gpsAccuracyMetersPerSecond = locationSpeed?.speedAccuracyMetersPerSecond,
+                estimatedSpeedMetersPerSecond = result.speedMetersPerSecond,
+                source = result.source
+            )
+        }
+
         FusionUiState(
             speedKmh = result.speedMetersPerSecond?.times(3.6),
             confidence = result.confidence,
@@ -76,6 +92,14 @@ class FusionViewModel(application: Application) : AndroidViewModel(application) 
             calibrationSampleCount = calibrationModel.sampleCount
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FusionUiState())
+
+    /** Exports every logged measurement as CSV into app-private external storage. */
+    suspend fun exportCsv(): File {
+        val exportDir = getApplication<Application>().getExternalFilesDir(null)
+            ?: getApplication<Application>().filesDir
+        val file = File(exportDir, "rainspeed_export_${System.currentTimeMillis()}.csv")
+        return loggingRepository.exportToCsv(file)
+    }
 
     override fun onCleared() {
         super.onCleared()

@@ -1,5 +1,6 @@
 package com.rainspeed.app.ui.camera
 
+import android.widget.Toast
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -7,18 +8,21 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -27,10 +31,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rainspeed.app.domain.fusion.SpeedSource
 import com.rainspeed.app.ui.fusion.FusionUiState
 import com.rainspeed.app.ui.fusion.FusionViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun CameraPreviewScreen(modifier: Modifier = Modifier, viewModel: FusionViewModel = viewModel()) {
+    val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val coroutineScope = rememberCoroutineScope()
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
     val frame by viewModel.frame.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -80,6 +87,20 @@ fun CameraPreviewScreen(modifier: Modifier = Modifier, viewModel: FusionViewMode
                 .align(Alignment.BottomStart)
                 .padding(16.dp)
         )
+
+        Button(
+            onClick = {
+                coroutineScope.launch {
+                    val file = viewModel.exportCsv()
+                    Toast.makeText(context, "Wyeksportowano: ${file.absolutePath}", Toast.LENGTH_LONG).show()
+                }
+            },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp)
+        ) {
+            Text("Eksportuj CSV")
+        }
     }
 
     LaunchedEffect(previewView) {
