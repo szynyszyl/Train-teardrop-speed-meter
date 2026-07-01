@@ -25,8 +25,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rainspeed.app.data.camera.CameraController
 import com.rainspeed.app.data.camera.ThrottlingAnalyzer
+import com.rainspeed.app.data.location.LocationSpeedProvider
 import com.rainspeed.app.data.vision.FrameAnalysisResult
 import com.rainspeed.app.data.vision.FrameProcessor
 import com.rainspeed.app.domain.vision.AngleAggregator
@@ -38,8 +40,10 @@ fun CameraPreviewScreen(modifier: Modifier = Modifier) {
     val cameraController = remember { CameraController(context) }
     val frameProcessor = remember { FrameProcessor() }
     val angleAggregator = remember { AngleAggregator() }
+    val locationSpeedProvider = remember { LocationSpeedProvider(context) }
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
     var lastFrame by remember { mutableStateOf<FrameAnalysisResult?>(null) }
+    val locationSpeed by locationSpeedProvider.speedUpdates().collectAsStateWithLifecycle(initialValue = null)
 
     Box(modifier = modifier) {
         AndroidView(
@@ -96,6 +100,21 @@ fun CameraPreviewScreen(modifier: Modifier = Modifier) {
                     .border(1.dp, Color.White)
             )
         }
+
+        // Shown in parallel with the angle estimate for now; fusion comes with FusionViewModel.
+        val gpsText = locationSpeed?.let { speed ->
+            "GPS: %.1f km/h (dokładność ±%s m/s)".format(
+                speed.speedMetersPerSecond * 3.6,
+                speed.speedAccuracyMetersPerSecond?.let { "%.2f".format(it) } ?: "?"
+            )
+        } ?: "GPS: brak sygnału"
+        Text(
+            text = gpsText,
+            color = Color.White,
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(16.dp)
+        )
     }
 
     LaunchedEffect(previewView) {

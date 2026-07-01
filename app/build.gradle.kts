@@ -69,6 +69,7 @@ dependencies {
     implementation(libs.androidx.camera.view)
 
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.play.services.location)
 
     implementation(libs.opencv)
 
