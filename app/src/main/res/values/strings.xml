@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">RainSpeed</string>
+
+    <string name="permission_rationale_title">Potrzebne uprawnienia</string>
+    <string name="permission_rationale_camera">Kamera jest potrzebna, aby obserwować krople deszczu spływające po szybie i szacować na tej podstawie prędkość pociągu.</string>
+    <string name="permission_rationale_location">Lokalizacja GPS jest potrzebna do kalibracji modelu — porównujemy kąt kropli z rzeczywistą prędkością z GPS.</string>
+    <string name="permission_grant_button">Udziel uprawnień</string>
+    <string name="permission_denied_permanently">Uprawnienia zostały odrzucone na stałe. Otwórz ustawienia aplikacji, aby je włączyć ręcznie.</string>
+    <string name="permission_open_settings">Otwórz ustawienia</string>
+
+    <string name="camera_preview_placeholder">Podgląd kamery</string>
+</resources>
