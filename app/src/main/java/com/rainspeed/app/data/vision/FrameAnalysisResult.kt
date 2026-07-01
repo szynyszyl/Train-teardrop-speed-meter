@@ -11,6 +11,8 @@ data class FrameAnalysisResult(
     val previewBitmap: Bitmap,
     val streaks: List<DetectedStreak>,
     val trackedAngles: List<Double>,
+    /** Average luma (0-255) of the raw frame before contrast equalization; low values mean dim light. */
+    val meanBrightness: Double,
     val displayWidth: Int,
     val displayHeight: Int
 )

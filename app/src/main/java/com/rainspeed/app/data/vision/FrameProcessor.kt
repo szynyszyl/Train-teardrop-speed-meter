@@ -23,6 +23,9 @@ class FrameProcessor(private val dropDetector: DropDetector = DropDetector()) {
         val rotationDegrees = imageProxy.imageInfo.rotationDegrees
 
         val gray = imageProxy.toCroppedGrayMat()
+        // Measured before equalizeHist, which flattens the histogram and would hide how dim
+        // the source frame actually was.
+        val meanBrightness = Core.mean(gray).`val`[0]
         Imgproc.equalizeHist(gray, gray)
 
         val streaks = dropDetector.detectStreaks(gray)
@@ -41,6 +44,7 @@ class FrameProcessor(private val dropDetector: DropDetector = DropDetector()) {
             previewBitmap = bitmap,
             streaks = streaks,
             trackedAngles = trackedAngles,
+            meanBrightness = meanBrightness,
             displayWidth = bitmap.width,
             displayHeight = bitmap.height
         )

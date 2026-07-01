@@ -44,24 +44,31 @@ class FusionViewModel(application: Application) : AndroidViewModel(application) 
     private val _frame = MutableStateFlow<FrameAnalysisResult?>(null)
     val frame: StateFlow<FrameAnalysisResult?> = _frame.asStateFlow()
 
+    private val _cameraError = MutableStateFlow<String?>(null)
+    val cameraError: StateFlow<String?> = _cameraError.asStateFlow()
+
     private var cameraBound = false
 
     fun bindCamera(lifecycleOwner: LifecycleOwner, previewView: PreviewView) {
         if (cameraBound) return
         cameraBound = true
         viewModelScope.launch {
-            cameraController.bindToLifecycle(
-                lifecycleOwner = lifecycleOwner,
-                previewView = previewView,
-                analyzer = ThrottlingAnalyzer(frameInterval = 4) { imageProxy ->
-                    val result = try {
-                        frameProcessor.process(imageProxy)
-                    } finally {
-                        imageProxy.close()
+            try {
+                cameraController.bindToLifecycle(
+                    lifecycleOwner = lifecycleOwner,
+                    previewView = previewView,
+                    analyzer = ThrottlingAnalyzer(frameInterval = 4) { imageProxy ->
+                        val result = try {
+                            frameProcessor.process(imageProxy)
+                        } finally {
+                            imageProxy.close()
+                        }
+                        _frame.value = result
                     }
-                    _frame.value = result
-                }
-            )
+                )
+            } catch (e: Exception) {
+                _cameraError.value = "Nie udało się uruchomić kamery: ${e.message}"
+            }
         }
     }
 

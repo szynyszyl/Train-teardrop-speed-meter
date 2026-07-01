@@ -4,10 +4,13 @@ import android.widget.Toast
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,10 +31,13 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.rainspeed.app.data.vision.FrameAnalysisResult
 import com.rainspeed.app.domain.fusion.SpeedSource
 import com.rainspeed.app.ui.fusion.FusionUiState
 import com.rainspeed.app.ui.fusion.FusionViewModel
 import kotlinx.coroutines.launch
+
+private const val LOW_LIGHT_BRIGHTNESS_THRESHOLD = 40.0
 
 @Composable
 fun CameraPreviewScreen(modifier: Modifier = Modifier, viewModel: FusionViewModel = viewModel()) {
@@ -41,6 +47,7 @@ fun CameraPreviewScreen(modifier: Modifier = Modifier, viewModel: FusionViewMode
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
     val frame by viewModel.frame.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val cameraError by viewModel.cameraError.collectAsStateWithLifecycle()
 
     Box(modifier = modifier) {
         AndroidView(
@@ -80,12 +87,29 @@ fun CameraPreviewScreen(modifier: Modifier = Modifier, viewModel: FusionViewMode
             )
         }
 
+        val warnings = buildWarnings(frame, cameraError)
+        if (warnings.isNotEmpty()) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(16.dp)
+                    .background(Color(0xAA5C1A1A), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                warnings.forEach { warning ->
+                    Text(text = warning, color = Color.White)
+                }
+            }
+        }
+
         Text(
             text = fusionStatusText(uiState),
             color = Color.White,
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(16.dp)
+                .background(Color(0x99000000), RoundedCornerShape(8.dp))
+                .padding(horizontal = 12.dp, vertical = 8.dp)
         )
 
         Button(
@@ -106,6 +130,22 @@ fun CameraPreviewScreen(modifier: Modifier = Modifier, viewModel: FusionViewMode
     LaunchedEffect(previewView) {
         previewView?.let { viewModel.bindCamera(lifecycleOwner, it) }
     }
+}
+
+private fun buildWarnings(frame: FrameAnalysisResult?, cameraError: String?): List<String> {
+    val warnings = mutableListOf<String>()
+    if (cameraError != null) {
+        warnings += cameraError
+    }
+    if (frame != null) {
+        if (frame.meanBrightness < LOW_LIGHT_BRIGHTNESS_THRESHOLD) {
+            warnings += "Słabe oświetlenie — detekcja kropli może być mniej dokładna."
+        }
+        if (frame.streaks.isEmpty() && frame.trackedAngles.isEmpty()) {
+            warnings += "Brak wykrytych smug deszczu — skieruj kamerę na mokrą szybę."
+        }
+    }
+    return warnings
 }
 
 private fun fusionStatusText(state: FusionUiState): String {
