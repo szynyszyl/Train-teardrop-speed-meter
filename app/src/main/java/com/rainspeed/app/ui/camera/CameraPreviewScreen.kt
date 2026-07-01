@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -20,30 +19,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.rainspeed.app.data.camera.CameraController
-import com.rainspeed.app.data.camera.ThrottlingAnalyzer
-import com.rainspeed.app.data.location.LocationSpeedProvider
-import com.rainspeed.app.data.vision.FrameAnalysisResult
-import com.rainspeed.app.data.vision.FrameProcessor
-import com.rainspeed.app.domain.vision.AngleAggregator
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.rainspeed.app.domain.fusion.SpeedSource
+import com.rainspeed.app.ui.fusion.FusionUiState
+import com.rainspeed.app.ui.fusion.FusionViewModel
 
 @Composable
-fun CameraPreviewScreen(modifier: Modifier = Modifier) {
-    val context = LocalContext.current
+fun CameraPreviewScreen(modifier: Modifier = Modifier, viewModel: FusionViewModel = viewModel()) {
     val lifecycleOwner = LocalLifecycleOwner.current
-    val cameraController = remember { CameraController(context) }
-    val frameProcessor = remember { FrameProcessor() }
-    val angleAggregator = remember { AngleAggregator() }
-    val locationSpeedProvider = remember { LocationSpeedProvider(context) }
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
-    var lastFrame by remember { mutableStateOf<FrameAnalysisResult?>(null) }
-    val locationSpeed by locationSpeedProvider.speedUpdates().collectAsStateWithLifecycle(initialValue = null)
+    val frame by viewModel.frame.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     Box(modifier = modifier) {
         AndroidView(
@@ -57,11 +47,11 @@ fun CameraPreviewScreen(modifier: Modifier = Modifier) {
 
         // Overlay draws detected streaks scaled from analysis-frame pixels to view pixels.
         // Approximate: doesn't account for FILL_CENTER's center-crop when aspect ratios differ.
-        lastFrame?.let { frame ->
+        frame?.let { f ->
             Canvas(modifier = Modifier.matchParentSize()) {
-                val scaleX = size.width / frame.displayWidth
-                val scaleY = size.height / frame.displayHeight
-                frame.streaks.forEach { streak ->
+                val scaleX = size.width / f.displayWidth
+                val scaleY = size.height / f.displayHeight
+                f.streaks.forEach { streak ->
                     drawLine(
                         color = Color.Green,
                         start = Offset(streak.x1 * scaleX, streak.y1 * scaleY),
@@ -71,27 +61,9 @@ fun CameraPreviewScreen(modifier: Modifier = Modifier) {
                 }
             }
 
-            val angleEstimate = angleAggregator.aggregate(frame.trackedAngles)
-            val angleText = if (angleEstimate != null) {
-                "Kąt: %.1f° (±%.1f°, n=%d)".format(
-                    angleEstimate.medianDegrees,
-                    angleEstimate.spreadDegrees,
-                    angleEstimate.sampleCount
-                )
-            } else {
-                "Kąt: brak danych (śledzenie rozpoczyna się)"
-            }
-            Text(
-                text = "Wykryte smugi: ${frame.streaks.size}\n$angleText",
-                color = Color.White,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(16.dp)
-            )
-
             // Debug thumbnail proving the OpenCV grayscale pipeline runs end to end.
             Image(
-                bitmap = frame.previewBitmap.asImageBitmap(),
+                bitmap = f.previewBitmap.asImageBitmap(),
                 contentDescription = null,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -101,15 +73,8 @@ fun CameraPreviewScreen(modifier: Modifier = Modifier) {
             )
         }
 
-        // Shown in parallel with the angle estimate for now; fusion comes with FusionViewModel.
-        val gpsText = locationSpeed?.let { speed ->
-            "GPS: %.1f km/h (dokładność ±%s m/s)".format(
-                speed.speedMetersPerSecond * 3.6,
-                speed.speedAccuracyMetersPerSecond?.let { "%.2f".format(it) } ?: "?"
-            )
-        } ?: "GPS: brak sygnału"
         Text(
-            text = gpsText,
+            text = fusionStatusText(uiState),
             color = Color.White,
             modifier = Modifier
                 .align(Alignment.BottomStart)
@@ -118,26 +83,19 @@ fun CameraPreviewScreen(modifier: Modifier = Modifier) {
     }
 
     LaunchedEffect(previewView) {
-        val view = previewView ?: return@LaunchedEffect
-        cameraController.bindToLifecycle(
-            lifecycleOwner = lifecycleOwner,
-            previewView = view,
-            analyzer = ThrottlingAnalyzer(frameInterval = 4) { imageProxy ->
-                val result = try {
-                    frameProcessor.process(imageProxy)
-                } finally {
-                    imageProxy.close()
-                }
-                // Mutate Compose state on the main thread; analysis runs on a background executor.
-                ContextCompat.getMainExecutor(context).execute { lastFrame = result }
-            }
-        )
+        previewView?.let { viewModel.bindCamera(lifecycleOwner, it) }
     }
+}
 
-    DisposableEffect(Unit) {
-        onDispose {
-            cameraController.shutdown()
-            frameProcessor.reset()
-        }
+private fun fusionStatusText(state: FusionUiState): String {
+    val speedText = state.speedKmh?.let { "%.1f km/h".format(it) } ?: "brak danych"
+    val sourceText = when (state.source) {
+        SpeedSource.GPS -> "GPS"
+        SpeedSource.ANGLE_ESTIMATE -> "kąt kropli (kalibracja)"
+        SpeedSource.UNAVAILABLE -> "brak"
     }
+    return "Prędkość: $speedText\n" +
+        "Źródło: $sourceText (pewność ${(state.confidence * 100).toInt()}%)\n" +
+        "GPS: ${if (state.gpsAvailable) "aktywny" else "brak sygnału"}, " +
+        "kalibracja: ${state.calibrationSampleCount} próbek"
 }
